@@ -2,6 +2,8 @@
 
 import Data.List (transpose)
 import Data.Char (isDigit)
+import Data.Maybe (fromJust, mapMaybe)
+import System.IO (hSetBuffering, stdout, BufferMode (NoBuffering))
 
 cls :: IO ()
 cls = putStr "\ESC[2J"
@@ -110,5 +112,64 @@ run g p = do cls
 tictactoe :: IO ()
 tictactoe = run empty O
 
+-- MinMax
+
+validMoves :: Grid -> Player -> [Grid]
+validMoves g p
+  | won g     = []
+  | isFull g  = []
+  | otherwise = mapMaybe (\i -> move g i p) [0..size^2]
+
+data Tree a = Node a [Tree a]
+              deriving Show
+
+gametree :: Grid -> Player -> Tree Grid
+gametree g p = Node g [gametree g' (next p) | g' <- validMoves g p]
+
+depth :: Int
+depth = 9
+
+prune :: Int -> Tree a -> Tree a
+prune 0 (Node x _)  = Node x []
+prune n (Node x ts) = Node x [prune (n-1) t | t <- ts]
+
+minmax :: Tree Grid -> Tree (Grid, Player)
+minmax (Node g [])
+  | hasWon g O  = Node (g, O) []
+  | hasWon g X  = Node (g, X) []
+  | otherwise   = Node (g, B) []
+minmax (Node g ts)
+  | turn g == O = Node (g, minimum ps) ts'
+  | turn g == X = Node (g, maximum ps) ts'
+                  where
+                    ts' = map minmax ts
+                    ps  = [p | Node (_, p) _ <- ts']
+
+bestmove :: Grid -> Player -> Grid
+bestmove g p = head [g' | Node (g', p') _ <- ts, p' == best]
+  where
+    tree = prune depth (gametree g p)
+    Node (_, best) ts = minmax tree
+
+play :: Grid -> Player -> IO ()
+play g p = do cls
+              goto (1, 1)
+              putGrid g
+              play' g p
+
+play' :: Grid -> Player -> IO ()
+play' g p
+  | hasWon g O = putStrLn "Player O wins!"
+  | hasWon g X = putStrLn "Player X wins!"
+  | isFull g     = putStrLn "Draw!"
+  | p == X     = do putStr "Player X is thinking... "
+                    (play $! bestmove g p) $ next p
+  | p == O     = do i <- getNat $ prompt p
+                    case move g i p of
+                      Nothing -> do putStrLn "ERROR: Invalid move"
+                                    play' g p
+                      Just g' -> play g' $ next p
+
 main :: IO ()
-main = tictactoe
+main = do hSetBuffering stdout NoBuffering
+          play empty O
