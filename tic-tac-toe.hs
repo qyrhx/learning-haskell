@@ -126,6 +126,13 @@ data Tree a = Node a [Tree a]
 gametree :: Grid -> Player -> Tree Grid
 gametree g p = Node g [gametree g' (next p) | g' <- validMoves g p]
 
+-- The 1 is for the initial grid
+numOfNodes :: Int
+numOfNodes = 1 + aux X (gametree empty X) where
+  aux :: Player -> Tree Grid -> Int
+  aux p (Node g []) = length $ validMoves g p
+  aux p (Node g ts) = length (validMoves g p) + sum (map (aux $ next p) ts)
+
 depth :: Int
 depth = 9
 
@@ -171,5 +178,6 @@ play' g p
                       Just g' -> play g' $ next p
 
 main :: IO ()
-main = do hSetBuffering stdout NoBuffering
-          play empty O
+main = print numOfNodes
+--main = do hSetBuffering stdout NoBuffering
+--          play empty O
